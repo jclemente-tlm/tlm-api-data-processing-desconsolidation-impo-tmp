@@ -18,7 +18,7 @@ RUN dotnet publish "Talma.AiServices.Api.csproj" -c Release -o /app/publish
 
 FROM base AS final
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends curl=8.5.0-2ubuntu10.8 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
 
 RUN useradd -r -s /bin/false appuser
