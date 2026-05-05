@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/compare/v1.0.0...v1.0.1) (2026-05-05)
+
+
+### Bug Fixes
+
+* elimina la entrada de rama en el flujo de trabajo de release y establece ambiente por defecto en dev ([a756606](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/a7566065a80b4a9e52f2ee1c3a3ffcbae424b544))
+
 # 1.0.0 (2026-05-05)
 
 
