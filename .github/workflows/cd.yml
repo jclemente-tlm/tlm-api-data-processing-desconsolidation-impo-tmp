@@ -81,6 +81,8 @@ jobs:
     if: needs.detect.outputs.ambiente == 'dev'
     uses: ./.github/workflows/_semantic-release.yml
     secrets: inherit
+    with:
+      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
 
   # ── STAGE: PUBLISH ───────────────────────────────────────
   publish:
@@ -92,24 +94,21 @@ jobs:
         needs.detect.outputs.ambiente != 'dev' ||
         (needs.semantic-release.result == 'success' && (needs.semantic-release.outputs.new_release_published || '') == 'true')
       )
-    uses: ./.github/workflows/_publish.yml
-    secrets: inherit
-    with:
-      ambiente: ${{ needs.detect.outputs.ambiente }}
-      manual_version: ${{ needs.detect.outputs.version }}
-      ecr_registry: ${{ vars.ECR_REGISTRY }}
-      role_arn_ecr: ${{ vars.AWS_ECR_ROLE_ARN }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[DISABLED] _publish.yml"
+        run: |
+          echo "✅ Las condiciones se cumplieron — publish se ejecutaría aquí"
+          echo "  ambiente : ${{ needs.detect.outputs.ambiente }}"
+          echo "  version  : ${{ needs.detect.outputs.version }}"
 
   # ── STAGE: DEPLOY ────────────────────────────────────────
   deploy:
     needs: [detect, semantic-release, publish]
     if: needs.publish.result == 'success'
-    uses: ./.github/workflows/_deploy.yml
-    secrets: inherit
-    with:
-      ambiente: ${{ needs.detect.outputs.ambiente }}
-      image_tag: ${{ needs.publish.outputs.image_tag || '' }}
-      ecr_registry: ${{ vars.ECR_REGISTRY }}
-      role_arn: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-      tf_state_bucket: ${{ vars.TF_STATE_BUCKET }}
-      aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[DISABLED] _deploy.yml"
+        run: |
+          echo "✅ Las condiciones se cumplieron — deploy se ejecutaría aquí"
+          echo "  ambiente : ${{ needs.detect.outputs.ambiente }}"
