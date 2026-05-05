@@ -2,6 +2,12 @@ name: "Módulo — Release"
 
 on:
   workflow_call:
+    inputs:
+      branch:
+        description: "Rama a procesar"
+        required: false
+        type: string
+        default: "dev"
     outputs:
       new_release_published:
         description: "Si se publicó una nueva versión"
@@ -28,7 +34,8 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          persist-credentials: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ inputs.branch || 'dev' }}
 
       - name: Configurar Node.js
         uses: actions/setup-node@v5
@@ -42,6 +49,7 @@ jobs:
         id: release
         uses: cycjimmy/semantic-release-action@v6
         with:
+          branches: ${{ inputs.branch || 'dev' }}
           extra_plugins: |
             @semantic-release/git
             @semantic-release/changelog
