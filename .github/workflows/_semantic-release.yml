@@ -3,11 +3,11 @@ name: "Módulo — Release"
 on:
   workflow_call:
     inputs:
-      commit_sha:
-        description: "SHA del commit a procesar"
+      branch:
+        description: "Rama a procesar"
         required: false
         type: string
-        default: ""
+        default: "dev"
     outputs:
       new_release_published:
         description: "Si se publicó una nueva versión"
@@ -35,7 +35,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ inputs.commit_sha || github.sha }}
+          ref: ${{ inputs.branch || 'dev' }}
 
       - name: Configurar Node.js
         uses: actions/setup-node@v5

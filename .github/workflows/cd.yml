@@ -82,7 +82,7 @@ jobs:
     uses: ./.github/workflows/_semantic-release.yml
     secrets: inherit
     with:
-      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
+      branch: ${{ github.event.workflow_run.head_branch || github.ref_name }}
 
   # ── STAGE: PUBLISH ───────────────────────────────────────
   publish:
