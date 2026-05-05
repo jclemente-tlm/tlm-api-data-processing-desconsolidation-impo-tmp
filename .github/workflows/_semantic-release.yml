@@ -2,12 +2,6 @@ name: "Módulo — Release"
 
 on:
   workflow_call:
-    inputs:
-      commit_sha:
-        description: "SHA del commit a procesar"
-        required: false
-        type: string
-        default: ""
     outputs:
       new_release_published:
         description: "Si se publicó una nueva versión"
@@ -33,7 +27,6 @@ jobs:
       - name: Checkout del repositorio
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.commit_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
