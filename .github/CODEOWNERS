@@ -1,0 +1,25 @@
+# CODEOWNERS — define quién debe aprobar cambios en cada área del repositorio
+
+# Formato: <patrón>  <@usuario o @org/equipo>
+
+# Docs: <https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners>
+
+# Propietarios globales por defecto (aplica a todo lo no cubierto abajo)
+
+*                           @DigitalFactoryTalma/dev-team
+
+# Código fuente — revisión de developers
+
+/src/                       @DigitalFactoryTalma/dev-team
+
+# Infraestructura como código — requiere revisión de DevOps
+
+/iac/                       @DigitalFactoryTalma/devops-team
+
+# Pipelines CI/CD — requiere revisión de DevOps
+
+/.github/workflows/         @DigitalFactoryTalma/devops-team
+
+# Dockerfile — revisión de DevOps
+
+**/Dockerfile                @DigitalFactoryTalma/devops-team

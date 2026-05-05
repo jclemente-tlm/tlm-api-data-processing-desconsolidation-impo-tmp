@@ -1,0 +1,177 @@
+name: "Módulo — Publish"
+
+on:
+  workflow_call:
+    inputs:
+      ambiente:
+        description: "Ambiente destino (dev, qa, prd)"
+        type: string
+        required: true
+      manual_version:
+        description: "Versión manual con 'v' (solo para qa/prd, ej: v1.2.3)"
+        type: string
+        default: ""
+      ecr_registry:
+        description: "URL base del ECR centralizado sin nombre de repo (ej: 111111111111.dkr.ecr.us-east-1.amazonaws.com)"
+        type: string
+        required: true
+      role_arn_ecr:
+        description: "ARN del rol IAM en la cuenta ECR a asumir via OIDC"
+        type: string
+        required: true
+      aws_region:
+        description: "Región AWS del ECR"
+        type: string
+        default: "us-east-1"
+    outputs:
+      image_tag:
+        description: "Tag final de imagen publicada en ECR"
+        value: ${{ jobs.publish.outputs.image_tag }}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publicar imagen en ECR
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tag.outputs.docker_tag }}
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolver nombre del proyecto e IMAGE_NAME
+        id: project
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+          ECR_REGISTRY: ${{ inputs.ecr_registry }}
+        run: |
+          if [ -f .github/project.json ]; then
+            NAME=$(jq -r '.name' .github/project.json)
+            TYPE=$(jq -r '.type // empty' .github/project.json)
+            if [ -n "$TYPE" ]; then
+              PROJECT_NAME="${NAME}-${TYPE}"
+            else
+              PROJECT_NAME="${NAME}"
+            fi
+          else
+            PROJECT_NAME="${REPO_NAME}"
+          fi
+          ECR_REPO_NAME="tlm-${PROJECT_NAME}"
+          echo "IMAGE_NAME=${ECR_REGISTRY}/${ECR_REPO_NAME}" >> $GITHUB_ENV
+          echo "ecr_repo_name=${ECR_REPO_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Resolver tags de imagen
+        id: tag
+        env:
+          INPUT_AMBIENTE: ${{ inputs.ambiente }}
+          INPUT_MANUAL_VERSION: ${{ inputs.manual_version }}
+        run: |
+          AMBIENTE="${INPUT_AMBIENTE}"
+          if [ "$AMBIENTE" = "dev" ]; then
+            git fetch --tags
+            GIT_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+            if [ -z "$GIT_TAG" ]; then
+              echo "::error::No se encontró ningún tag semver (vX.Y.Z) en el repositorio. Ejecuta semantic-release al menos una vez."
+              exit 1
+            fi
+            DOCKER_TAG="${GIT_TAG}-dev"
+          elif [ "$AMBIENTE" = "qa" ]; then
+            GIT_TAG="${INPUT_MANUAL_VERSION}"
+            if [ -z "$GIT_TAG" ]; then
+              echo "::error::manual_version es requerido para ambiente qa (ej: v1.2.3)"
+              exit 1
+            fi
+            if ! echo "$GIT_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::manual_version debe tener formato semver con 'v' (ej: v1.2.3), recibido: $GIT_TAG"
+              exit 1
+            fi
+            DOCKER_TAG="${GIT_TAG}-rc"
+          else
+            GIT_TAG="${INPUT_MANUAL_VERSION}"
+            if [ -z "$GIT_TAG" ]; then
+              echo "::error::manual_version es requerido para ambiente prd (ej: v1.2.3)"
+              exit 1
+            fi
+            if ! echo "$GIT_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::manual_version debe tener formato semver con 'v' (ej: v1.2.3), recibido: $GIT_TAG"
+              exit 1
+            fi
+            DOCKER_TAG="${GIT_TAG}"
+          fi
+          echo "docker_tag=$DOCKER_TAG" >> $GITHUB_OUTPUT
+          echo "git_tag=$GIT_TAG" >> $GITHUB_OUTPUT
+          echo "Ambiente: $AMBIENTE | Git tag: $GIT_TAG | Docker tag: $DOCKER_TAG"
+
+      - name: Configurar credenciales AWS — cuenta ECR (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ inputs.role_arn_ecr }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Login a ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Verificar si el tag ya existe en ECR
+        id: check_tag
+        env:
+          DOCKER_TAG: ${{ steps.tag.outputs.docker_tag }}
+          PROJECT_NAME: ${{ steps.project.outputs.ecr_repo_name }}
+          AWS_REGION_INPUT: ${{ inputs.aws_region }}
+          INPUT_AMBIENTE: ${{ inputs.ambiente }}
+        run: |
+          EXISTS=$(aws ecr describe-images \
+            --repository-name "${PROJECT_NAME}" \
+            --image-ids imageTag="${DOCKER_TAG}" \
+            --region "${AWS_REGION_INPUT}" 2>/dev/null && echo "true" || echo "false")
+          echo "exists=${EXISTS}" >> $GITHUB_OUTPUT
+          if [ "$EXISTS" = "true" ]; then
+            echo "::notice::Tag ${DOCKER_TAG} ya existe en ECR — se omite el push y se continúa con el deploy"
+          fi
+          AMBIENTE="${INPUT_AMBIENTE}"
+          if [ "$AMBIENTE" = "dev" ] && [ "$EXISTS" = "false" ]; then
+            echo "should_push_dev=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_push_dev=false" >> $GITHUB_OUTPUT
+          fi
+          if [ "$AMBIENTE" = "qa" ] && [ "$EXISTS" = "false" ]; then
+            echo "should_push_qa=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_push_qa=false" >> $GITHUB_OUTPUT
+          fi
+          if [ "$AMBIENTE" = "prd" ] && [ "$EXISTS" = "false" ]; then
+            echo "should_push_prd=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_push_prd=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configurar Docker Buildx
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build y push imagen (DEV)
+        if: steps.check_tag.outputs.should_push_dev == 'true'
+        run: |
+          docker build -t ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.docker_tag }} .
+          docker push ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.docker_tag }}
+
+      - name: Retaguear imagen a RC (QA)
+        if: steps.check_tag.outputs.should_push_qa == 'true'
+        run: |
+          DEV_TAG="${{ steps.tag.outputs.git_tag }}-dev"
+          docker pull ${{ env.IMAGE_NAME }}:${DEV_TAG}
+          docker tag ${{ env.IMAGE_NAME }}:${DEV_TAG} ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.docker_tag }}
+          docker push ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.docker_tag }}
+
+      - name: Retaguear imagen a semver (PRD)
+        if: steps.check_tag.outputs.should_push_prd == 'true'
+        run: |
+          RC_TAG="${{ steps.tag.outputs.git_tag }}-rc"
+          docker pull ${{ env.IMAGE_NAME }}:${RC_TAG}
+          docker tag ${{ env.IMAGE_NAME }}:${RC_TAG} ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.docker_tag }}
+          docker push ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.docker_tag }}

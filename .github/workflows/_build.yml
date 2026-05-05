@@ -1,0 +1,39 @@
+name: "Módulo — Build"
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        description: "Versión del SDK de .NET"
+        type: string
+        default: "10.0.x"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Compilar solución
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v6
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Caché de paquetes NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restaurar dependencias
+        run: dotnet restore
+
+      - name: Compilar solución
+        run: dotnet build --configuration Release --no-restore

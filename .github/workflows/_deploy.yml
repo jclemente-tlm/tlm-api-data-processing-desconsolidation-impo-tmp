@@ -1,0 +1,110 @@
+name: "Módulo — Deploy"
+
+on:
+  workflow_call:
+    inputs:
+      ambiente:
+        description: "Ambiente destino (dev, qa, prd)"
+        type: string
+        required: true
+      image_tag:
+        description: "Tag de imagen a desplegar (ej: v1.2.3-dev)"
+        type: string
+        required: true
+      ecr_registry:
+        description: "URL base del ECR centralizado sin nombre de repo (ej: 111111111111.dkr.ecr.us-east-1.amazonaws.com)"
+        type: string
+        required: true
+      role_arn:
+        description: "ARN del rol IAM a asumir via OIDC (ej: arn:aws:iam::123456789012:role/github-actions-deploy)"
+        type: string
+        required: true
+      tf_state_bucket:
+        description: "Nombre del bucket S3 para el estado de Terraform"
+        type: string
+        required: true
+      aws_region:
+        description: "Región AWS donde se despliega"
+        type: string
+        default: "us-east-1"
+    secrets:
+      HOST_LOKI:
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Desplegar en AWS ECS
+    runs-on: ubuntu-latest
+
+    env:
+      TF_VAR_image_tag: ${{ inputs.image_tag }}
+      TF_VAR_loki_host: ${{ secrets.HOST_LOKI }}
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v6
+
+      - name: Resolver nombre del proyecto
+        id: project
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+          ECR_REGISTRY: ${{ inputs.ecr_registry }}
+        run: |
+          if [ -f .github/project.json ]; then
+            NAME=$(jq -r '.name' .github/project.json)
+            TYPE=$(jq -r '.type // empty' .github/project.json)
+            if [ -n "$TYPE" ]; then
+              PROJECT_NAME="${NAME}-${TYPE}"
+            else
+              PROJECT_NAME="${NAME}"
+            fi
+          else
+            PROJECT_NAME="${REPO_NAME}"
+          fi
+          ECR_REPO_NAME="tlm-${PROJECT_NAME}"
+          echo "TF_VAR_image_name=${ECR_REGISTRY}/${ECR_REPO_NAME}" >> $GITHUB_ENV
+          echo "TF_VAR_service_name=${PROJECT_NAME}" >> $GITHUB_ENV
+          echo "service_name=${PROJECT_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Validar image_tag
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          if [ -z "${IMAGE_TAG}" ]; then
+            echo "::error::image_tag está vacío. El stage publish no produjo un tag válido."
+            exit 1
+          fi
+
+      - name: Configurar credenciales AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ inputs.role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Configurar Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform Init
+        working-directory: ./iac
+        env:
+          TF_STATE_BUCKET: ${{ inputs.tf_state_bucket }}
+          TF_AWS_REGION: ${{ inputs.aws_region }}
+          SERVICE_NAME: ${{ steps.project.outputs.service_name }}
+          AMBIENTE: ${{ inputs.ambiente }}
+        run: |
+          terraform init -reconfigure \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="region=${TF_AWS_REGION}" \
+            -backend-config="key=ecs/${SERVICE_NAME}/${AMBIENTE}/terraform.tfstate"
+
+      - name: Terraform Apply
+        working-directory: ./iac
+        env:
+          AMBIENTE: ${{ inputs.ambiente }}
+        run: |
+          terraform apply -auto-approve \
+            -var-file="environments/${AMBIENTE}.tfvars"

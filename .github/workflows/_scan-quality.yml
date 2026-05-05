@@ -1,0 +1,142 @@
+name: "Módulo — Scan Calidad (SonarQube)"
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        description: "Versión del SDK de .NET"
+        type: string
+        default: "10.0.x"
+      sonar-host-url:
+        description: "URL del servidor SonarQube"
+        type: string
+        required: true
+    secrets:
+      SONAR_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan-quality:
+    name: Scan Calidad — SonarQube
+    runs-on: ubuntu-latest
+
+    env:
+      SONAR_HOST_URL: ${{ inputs.sonar-host-url }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_PROJECT_KEY: ${{ github.event.repository.name }}
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Caché de paquetes NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restaurar dependencias
+        run: dotnet restore
+
+      - name: Descargar reporte de cobertura
+        id: download-coverage
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: coverage-report
+          path: coverage
+
+      - name: Instalar SonarScanner para .NET
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          echo "${HOME}/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Iniciar análisis SonarQube
+        run: |
+          COVERAGE_ARG=""
+          if [ "${{ steps.download-coverage.outcome }}" = "success" ]; then
+            COVERAGE_ARG="/d:sonar.cs.opencover.reportsPaths=coverage/**/coverage.opencover.xml"
+          fi
+
+          dotnet sonarscanner begin \
+            /k:"$SONAR_PROJECT_KEY" \
+            /d:sonar.host.url="$SONAR_HOST_URL" \
+            /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.exclusions="**/bin/**,**/obj/**,**/TestResults/**" \
+            $COVERAGE_ARG
+
+      - name: Compilar solución
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Finalizar análisis SonarQube
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+
+      - name: Esperar y verificar Quality Gate
+        run: |
+          MAX_RETRIES=12
+          WAIT_SECONDS=10
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Intento $i/$MAX_RETRIES — consultando Quality Gate..."
+            RESPONSE=$(curl -s -H "Authorization: Bearer ${SONAR_TOKEN}" \
+              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}")
+            STATUS=$(echo "$RESPONSE" | jq -r '.projectStatus.status')
+            echo "Estado: $STATUS"
+            if [ "$STATUS" = "OK" ] || [ "$STATUS" = "ERROR" ] || [ "$STATUS" = "WARN" ]; then
+              break
+            fi
+            sleep $WAIT_SECONDS
+          done
+          echo "QUALITY_GATE=$STATUS" >> $GITHUB_ENV
+          if [ "$STATUS" != "OK" ]; then
+            echo "Quality Gate FAILED ($STATUS)"
+            exit 1
+          else
+            echo "Quality Gate PASSED"
+          fi
+
+      - name: Obtener métricas de SonarQube
+        if: always()
+        run: |
+          METRICS="coverage,duplicated_lines_density,reliability_rating,sqale_rating,security_rating,bugs,vulnerabilities,code_smells"
+          RESULT=$(curl -s -H "Authorization: Bearer ${SONAR_TOKEN}" \
+            "${SONAR_HOST_URL}/api/measures/component?component=${SONAR_PROJECT_KEY}&metricKeys=${METRICS}")
+          echo "RESULT_JSON=$RESULT" >> $GITHUB_ENV
+
+      - name: Publicar resumen en GitHub Actions
+        if: always()
+        run: |
+          echo "## 🔍 SonarQube — \`$SONAR_PROJECT_KEY\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Quality Gate:** $QUALITY_GATE" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 [Ver dashboard en SonarQube](${SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Métrica | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          for METRIC in reliability_rating sqale_rating security_rating coverage duplicated_lines_density bugs vulnerabilities code_smells; do
+            VALUE=$(echo "$RESULT_JSON" | jq -r ".component.measures[] | select(.metric==\"$METRIC\") | .value")
+            [ "$VALUE" = "null" ] || [ -z "$VALUE" ] && VALUE="N/A"
+            case $METRIC in
+              reliability_rating)       LABEL="🧩 Reliability Rating" ;;
+              sqale_rating)             LABEL="🧠 Maintainability" ;;
+              security_rating)          LABEL="🔒 Security Rating" ;;
+              coverage)                 LABEL="🧮 Coverage (%)" ;;
+              duplicated_lines_density) LABEL="📄 Duplicaciones (%)" ;;
+              bugs)                     LABEL="🐞 Bugs" ;;
+              vulnerabilities)          LABEL="🚨 Vulnerabilities" ;;
+              code_smells)              LABEL="💨 Code Smells" ;;
+            esac
+            echo "| $LABEL | **$VALUE** |" >> $GITHUB_STEP_SUMMARY
+          done

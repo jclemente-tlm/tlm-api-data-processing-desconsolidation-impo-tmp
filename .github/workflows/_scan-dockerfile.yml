@@ -1,0 +1,60 @@
+name: "Módulo — Scan Dockerfile (Hadolint)"
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  scan-dockerfile:
+    name: Scan Dockerfile — Hadolint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v6
+
+      - name: Crear carpeta de reportes
+        run: mkdir -p hadolint-reports
+
+      - name: Ejecutar Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ./Dockerfile
+          format: json
+          output-file: hadolint-reports/Dockerfile.json
+
+      - name: Publicar resumen en GitHub Actions
+        if: always()
+        run: |
+          echo "## 🐳 Hadolint — Dockerfile" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if ls hadolint-reports/*.json 1> /dev/null 2>&1; then
+            for report in hadolint-reports/*.json; do
+              file=$(basename "$report")
+              count=$(jq length "$report")
+              echo "# 📄 Dockerfile" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              if [ "$count" -gt 0 ]; then
+                echo "- ⚠️ **Issues encontrados:** $count" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "**Detalles:**" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                jq -r '.[] | "- ❌ **\(.code)**: \(.message) (línea \(.line))"' "$report" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "- ✅ Sin problemas detectados" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
+          else
+            echo "⚠️ No se encontraron reportes de Hadolint." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Subir reportes Hadolint
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: reporte-hadolint
+          path: hadolint-reports/

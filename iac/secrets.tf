@@ -1,0 +1,1 @@
+# Secrets Manager reservado para secretos de aplicación (no requiere configuración de registry con ECR)

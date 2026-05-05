@@ -1,0 +1,122 @@
+name: "Módulo — Scan SCA (OWASP)"
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        description: "Versión del SDK de .NET"
+        type: string
+        default: "10.0.x"
+
+permissions:
+  contents: read
+
+jobs:
+  scan-deps:
+    name: Scan SCA — OWASP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v6
+
+      - name: Configurar .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Detectar nombre del proyecto
+        id: detect
+        run: |
+          PROJECT_NAME=$(basename "$(ls *.sln | head -n 1)" .sln)
+          echo "project=$PROJECT_NAME" >> $GITHUB_OUTPUT
+
+      - name: Caché de paquetes NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restaurar dependencias NuGet
+        run: dotnet restore
+
+      - name: Ejecutar OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: ${{ steps.detect.outputs.project }}
+          path: "."
+          format: "ALL"
+          out: "reports"
+          args: "--suppression dependency-check-suppressions.xml"
+
+      - name: Validar y publicar resumen
+        if: always()
+        run: |
+          REPORT="reports/dependency-check-report.json"
+
+          CRITICAL=$(jq '[.dependencies[]? | .vulnerabilities[]?
+            | select(((.severity // "")|ascii_downcase)=="critical"
+              or ((.cvssv3.baseSeverity // "")|ascii_downcase)=="critical"
+              or ((.cvssv2.baseSeverity // "")|ascii_downcase)=="critical")]
+            | length' "$REPORT")
+
+          HIGH=$(jq '[.dependencies[]? | .vulnerabilities[]?
+            | select(((.severity // "")|ascii_downcase)=="high"
+              or ((.cvssv3.baseSeverity // "")|ascii_downcase)=="high"
+              or ((.cvssv2.baseSeverity // "")|ascii_downcase)=="high")]
+            | length' "$REPORT")
+
+          MEDIUM=$(jq '[.dependencies[]? | .vulnerabilities[]?
+            | select(((.severity // "")|ascii_downcase)=="medium"
+              or ((.cvssv3.baseSeverity // "")|ascii_downcase)=="medium"
+              or ((.cvssv2.baseSeverity // "")|ascii_downcase)=="medium")]
+            | length' "$REPORT")
+
+          LOW=$(jq '[.dependencies[]? | .vulnerabilities[]?
+            | select(((.severity // "")|ascii_downcase)=="low"
+              or ((.cvssv3.baseSeverity // "")|ascii_downcase)=="low"
+              or ((.cvssv2.baseSeverity // "")|ascii_downcase)=="low")]
+            | length' "$REPORT")
+
+          {
+            echo "## 📦 OWASP Dependency Check"
+            echo ""
+            echo "### 📄 Resumen"
+            echo ""
+            echo "| Severidad | Conteo |"
+            echo "|-----------|--------|"
+            echo "| 🔴 Críticas | **$CRITICAL** |"
+            echo "| 🟠 Altas    | **$HIGH** |"
+            echo "| 🟡 Medias   | **$MEDIUM** |"
+            echo "| 🔵 Bajas    | **$LOW** |"
+            echo ""
+            echo "### 🔍 Detalles"
+            echo ""
+            echo "| Paquete | CVE | Score | Severidad | CPE detectado | Descripción |"
+            echo "|---------|-----|-------|-----------|---------------|-------------|"
+            jq -r '
+              .dependencies[]?
+              | select(.vulnerabilities != null and (.vulnerabilities | length) > 0)
+              | (.packages[0].id // .fileName | ltrimstr("pkg:nuget/")) as $pkg
+              | (.vulnerabilityIds[0].id // "N/A") as $cpe
+              | .vulnerabilities[]?
+              | (.cvssv3.baseScore // .cvssv2.score // "N/A" | tostring) as $score
+              | (.severity // .cvssv3.baseSeverity // .cvssv2.baseSeverity // "UNKNOWN") as $sev
+              | (.description // "" | gsub("\n"; " ") | gsub("\\|"; "\\|")) as $cleandesc
+              | ($cleandesc[0:120] + if ($cleandesc | length) > 120 then "…" else "" end) as $desc
+              | "| `\($pkg)` | [\(.name)](https://nvd.nist.gov/vuln/detail/\(.name)) | \($score) | **\($sev)** | `\($cpe)` | \($desc) |"
+            ' "$REPORT"
+          } >> $GITHUB_STEP_SUMMARY
+
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+            echo "⛔ Se encontraron vulnerabilidades CRÍTICAS y/o ALTAS. Fallando el job."
+            exit 1
+          fi
+
+      - name: Subir reporte OWASP
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: reporte-owasp
+          path: reports
