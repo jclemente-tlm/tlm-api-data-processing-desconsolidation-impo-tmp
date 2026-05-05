@@ -1,0 +1,77 @@
+name: "Módulo — Scan SAST (Semgrep)"
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  scan-semgrep:
+    name: Scan SAST — Semgrep
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v6
+
+      - name: Instalar Semgrep
+        run: pip install semgrep --quiet
+
+      - name: Ejecutar Semgrep
+        run: |
+          semgrep scan \
+            --config "p/csharp" \
+            --config "p/owasp-top-ten" \
+            --config "p/security-audit" \
+            --json \
+            -o semgrep-report.json \
+            . || true
+
+      - name: Publicar resumen en GitHub Actions
+        if: always()
+        run: |
+          if [ ! -f semgrep-report.json ]; then
+            echo "No se generó reporte de Semgrep"
+            exit 1
+          fi
+
+          TOTAL=$(jq '.results | length' semgrep-report.json)
+          ERRORS=$(jq '.errors | length' semgrep-report.json)
+
+          {
+            echo "## 🔍 Semgrep SAST Scan"
+            echo ""
+            echo "### 📄 Resumen"
+            echo ""
+            echo "| Resultado | Conteo |"
+            echo "|-----------|--------|"
+            echo "| ⚠️ Findings | **$TOTAL** |"
+            echo "| ❌ Errores de parseo | **$ERRORS** |"
+            echo ""
+
+            if [ "$TOTAL" -gt 0 ]; then
+              echo "### 🔎 Detalles"
+              echo ""
+              echo "| Archivo | Línea | Regla | Mensaje |"
+              echo "|---------|-------|-------|---------|"
+              jq -r '
+                .results[]
+                | (.extra.message | gsub("\n"; " ") | gsub("\\|"; "\\|")) as $msg
+                | ($msg[0:100] + if ($msg | length) > 100 then "…" else "" end) as $short
+                | "| `\(.path)` | \(.start.line) | `\(.check_id | split(".")[-1])` | \($short) |"
+              ' semgrep-report.json
+            fi
+          } >> $GITHUB_STEP_SUMMARY
+
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "⛔ Semgrep encontró $TOTAL finding(s). Fallando el job."
+            exit 1
+          fi
+
+      - name: Subir reporte Semgrep
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: reporte-semgrep
+          path: semgrep-report.json

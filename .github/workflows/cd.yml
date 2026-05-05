@@ -1,0 +1,115 @@
+name: CD
+
+on:
+  # DEV: automático cuando CI pasa en dev
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [dev]
+
+  # QA y PRD: manual, el dev elige la versión a desplegar
+  # DEV manual: desde cualquier rama (ej: feature/*) para validar el pipeline
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión a desplegar (ej: v1.1.0)"
+        required: false
+        default: ""
+      environment:
+        description: "Ambiente destino"
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - prd
+
+concurrency:
+  group: "cd-${{ github.ref }}"
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+# ─────────────────────────────────────────────────────────────
+# Orquestador CD
+# Stages: publish → deploy  (+ verify cuando se agregue DAST)
+#
+# Módulos:
+#   _semantic-release.yml  publish — Semantic Release → git tag + CHANGELOG
+#   _publish.yml           publish — Docker build/retag + push ECR + Trivy
+#   _deploy.yml            deploy  — Terraform → ECS Fargate
+#
+# Nota: el stage detect resuelve ambiente/versión (no es un stage de producto)
+# ─────────────────────────────────────────────────────────────
+jobs:
+  # ── Detectar ambiente y versión del trigger ───────────────
+  detect:
+    name: "Detectar ambiente"
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    outputs:
+      ambiente: ${{ steps.resolve.outputs.ambiente }}
+      version: ${{ steps.resolve.outputs.version }}
+
+    steps:
+      - name: Resolver ambiente y versión
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "${EVENT_NAME}" = "push" ] || [ "${EVENT_NAME}" = "workflow_run" ]; then
+            echo "ambiente=dev" >> $GITHUB_OUTPUT
+            echo "version=" >> $GITHUB_OUTPUT
+          else
+            echo "ambiente=${INPUT_ENVIRONMENT}" >> $GITHUB_OUTPUT
+            echo "version=${INPUT_VERSION}" >> $GITHUB_OUTPUT
+          fi
+
+  # ── STAGE: SEMANTIC RELEASE (solo dev) ─────────────────
+  semantic-release:
+    needs: detect
+    if: needs.detect.outputs.ambiente == 'dev'
+    uses: ./.github/workflows/_semantic-release.yml
+    secrets: inherit
+
+  # ── STAGE: PUBLISH ───────────────────────────────────────
+  publish:
+    needs: [detect, semantic-release]
+    if: |
+      always() &&
+      needs.detect.result == 'success' &&
+      (
+        needs.detect.outputs.ambiente != 'dev' ||
+        (needs.semantic-release.result == 'success' && (needs.semantic-release.outputs.new_release_published || '') == 'true')
+      )
+    uses: ./.github/workflows/_publish.yml
+    secrets: inherit
+    with:
+      ambiente: ${{ needs.detect.outputs.ambiente }}
+      manual_version: ${{ needs.detect.outputs.version }}
+      ecr_registry: ${{ vars.ECR_REGISTRY }}
+      role_arn_ecr: ${{ vars.AWS_ECR_ROLE_ARN }}
+
+  # ── STAGE: DEPLOY ────────────────────────────────────────
+  deploy:
+    needs: [detect, semantic-release, publish]
+    if: needs.publish.result == 'success'
+    uses: ./.github/workflows/_deploy.yml
+    secrets: inherit
+    with:
+      ambiente: ${{ needs.detect.outputs.ambiente }}
+      image_tag: ${{ needs.publish.outputs.image_tag || '' }}
+      ecr_registry: ${{ vars.ECR_REGISTRY }}
+      role_arn: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+      tf_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+      aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}

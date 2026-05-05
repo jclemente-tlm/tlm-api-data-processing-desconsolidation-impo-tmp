@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: ["feature/**", "feature*", "fix/**", "fix*", "dev"]
+  pull_request:
+    branches: [dev, qa, main]
+
+concurrency:
+  group: "ci-${{ github.ref }}"
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# ─────────────────────────────────────────────────────────────
+# Orquestador CI
+# Stages: build → test → scan
+#
+# Cada job corre tan pronto como sus dependencias reales lo permiten.
+# Los scans estáticos corren en paralelo con build (sin dependencia real).
+#
+# Módulos:
+#   _build.yml            build — compilación rápida, fail fast
+#   _test.yml             test  — tests unitarios + coverage artifact
+#   _scan-quality.yml     scan  — SonarQube calidad (consume coverage artifact)
+#   _scan-sast.yml        scan  — Semgrep (SAST seguridad .NET/C# + OWASP)
+#   _scan-secrets.yml     scan  — Gitleaks (secretos expuestos)
+#   _scan-iac.yml         scan  — Checkov + terraform validate (Terraform)
+#   _scan-dockerfile.yml  scan  — Hadolint
+#   _scan-deps.yml        scan  — OWASP Dependency Check (SCA, hace dotnet restore propio — independiente)
+#   _scan-trivy.yml       scan  — Trivy contenedor + filesystem
+# ─────────────────────────────────────────────────────────────
+jobs:
+  # ── SCANS INDEPENDIENTES (arrancan inmediatamente) ─────────
+  # Sin dependencias reales — corren en paralelo con build
+  scan-secrets:
+    uses: ./.github/workflows/_scan-secrets.yml
+
+  scan-sast:
+    uses: ./.github/workflows/_scan-sast.yml
+
+  scan-iac:
+    uses: ./.github/workflows/_scan-iac.yml
+
+  scan-dockerfile:
+    uses: ./.github/workflows/_scan-dockerfile.yml
+
+  scan-deps:
+    uses: ./.github/workflows/_scan-deps.yml
+
+  # ── BUILD ─────────────────────────────────────────────────
+  build:
+    uses: ./.github/workflows/_build.yml
+    secrets: inherit
+
+  # ── TEST ──────────────────────────────────────────────────
+  test:
+    needs: build
+    uses: ./.github/workflows/_test.yml
+
+  # ── SCANS POST-BUILD ──────────────────────────────────────
+  scan-trivy:
+    needs: build
+    if: github.ref == 'refs/heads/dev' || github.event_name == 'pull_request'
+    uses: ./.github/workflows/_scan-trivy.yml
+    secrets: inherit
+
+  # ── SCANS POST-TEST ───────────────────────────────────────
+  # scan-quality consume el artifact de cobertura de test
+  scan-quality:
+    needs: test
+    uses: ./.github/workflows/_scan-quality.yml
+    with:
+      sonar-host-url: ${{ vars.SONAR_HOST_URL }}
+    secrets: inherit
