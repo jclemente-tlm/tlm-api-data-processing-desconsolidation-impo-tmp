@@ -1,3 +1,25 @@
+# 1.0.0 (2026-05-05)
+
+
+### Bug Fixes
+
+* actualiza el flujo de trabajo de release para usar la rama en lugar del SHA del commit ([ae02451](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/ae024510d82b5383f1a7e66c094f91c8ffb67bd5))
+* actualiza el nombre del paquete en package-lock.json ([2d60c4f](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/2d60c4f4097dccc4fde2c89a5feefe12309b4d93))
+* añade referencia para el checkout en el flujo de trabajo de release ([f0c4df0](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/f0c4df04ebe8cfaf2ecc21f5d33f3bd861731ddd))
+* añade soporte para la referencia de rama en el flujo de trabajo de CD ([b711f7f](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/b711f7f59cdae4f196e212f2bbd0d0cf174d4d51))
+* añade soporte para procesar SHA de commit en el flujo de trabajo de release ([b28c186](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/b28c186ce40af39e35be5f39f4683d085f297091))
+* añade soporte para procesar SHA de commit en el flujo de trabajo de release ([80f1d83](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/80f1d83a902127e1f6377c56b79950dca4c908a6))
+* corrige la configuración de checkout para usar el token de GitHub ([859e61a](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/859e61a21c1d1d714096dceeb2032de27b1dbf13))
+* desactiva etapas de publicación y despliegue en el flujo de trabajo de CD ([e7e8989](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/e7e898931f233ab67a09c0780b10ca04f6204988))
+* elimina la entrada de SHA de commit en el flujo de trabajo de release ([d34c6d7](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/d34c6d774d2af728420f715d41d1bd2a7fbe94a5))
+* elimina versión específica de curl en Dockerfile ([29c6780](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/29c678081c443559bb485e6906e64b483ef19c80))
+* especifica la versión de curl en Dockerfile ([f12d5f4](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/f12d5f4341a7a1b678d7778e9ec42f3c14c76462))
+
+
+### Features
+
+* añade proyecto inicial ([06c03ec](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/06c03ec8d559c5bbb891572b7d9a6e3b4f9bffb9))
+
 ## [1.5.4](https://github.com/DigitalFactoryTalma/tlm-api-data-processing-desconsolidation-impo/compare/v1.5.3...v1.5.4) (2026-04-30)
 
 
