@@ -27,6 +27,7 @@ jobs:
       - name: Checkout del repositorio
         uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
