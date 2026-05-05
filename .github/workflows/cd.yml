@@ -66,9 +66,12 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_ENVIRONMENT: ${{ inputs.environment }}
           INPUT_VERSION: ${{ inputs.version }}
+          WR_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           if [ "${EVENT_NAME}" = "push" ] || [ "${EVENT_NAME}" = "workflow_run" ]; then
-            echo "ambiente=dev" >> $GITHUB_OUTPUT
+            BRANCH="${WR_BRANCH:-${REF_NAME}}"
+            echo "ambiente=${BRANCH}" >> $GITHUB_OUTPUT
             echo "version=" >> $GITHUB_OUTPUT
           else
             echo "ambiente=${INPUT_ENVIRONMENT}" >> $GITHUB_OUTPUT
