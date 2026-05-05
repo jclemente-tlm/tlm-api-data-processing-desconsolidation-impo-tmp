@@ -46,7 +46,9 @@ jobs:
         run: npm ci
 
       - name: Debug branch input
-        run: echo "branch input = '${{ inputs.branch }}'"
+        env:
+          BRANCH: ${{ inputs.branch }}
+        run: echo "branch input = '${BRANCH}'"
 
       - name: Generar release (Semantic Release)
         id: release
