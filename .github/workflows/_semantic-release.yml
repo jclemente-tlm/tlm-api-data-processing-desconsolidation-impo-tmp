@@ -37,14 +37,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ inputs.branch || 'dev' }}
 
-      - name: Configurar Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 24
-
-      - name: Instalar dependencias
-        run: npm ci
-
       - name: Generar release (Semantic Release)
         id: release
         uses: cycjimmy/semantic-release-action@v6
