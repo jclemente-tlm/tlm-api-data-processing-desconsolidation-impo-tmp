@@ -1,3 +1,16 @@
+## [1.0.2](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/compare/v1.0.1...v1.0.2) (2026-05-06)
+
+
+### Bug Fixes
+
+* actualiza el flujo de trabajo de release y CD para soportar la rama de entrada ([8270779](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/827077934ce0083f07c0f2952043623fb9c0726a))
+* actualiza la acción de generación de release para manejar correctamente la publicación y la versión ([ab29703](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/ab297036a531448f6b6f9c6c7d2c43f6b4967203))
+* añade la variable GITHUB_REF_NAME para mejorar la gestión de ramas en el flujo de trabajo de release ([0b0d115](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/0b0d11501691275a0920ef6fd20f0b855dadc93b))
+* añade paso de depuración para la entrada de rama en el flujo de trabajo de release ([03451a6](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/03451a662e24f23d12185a1f06b4162f3e93e8a8))
+* corrige la salida de depuración para la entrada de rama en el flujo de trabajo de release ([8bc7f56](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/8bc7f562b70ffcd134cbe3ac62d37a98fe2cc0f8))
+* elimina la duplicación del título en el README ([6ff1fbe](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/6ff1fbe0245a2ee0df42e700825fab637199e959))
+* simplifica la generación de release eliminando el código redundante y ajustando la configuración de plugins ([2469098](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/24690986492b9181bce1db7dbf48d7619f600cec))
+
 ## [1.0.1](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/compare/v1.0.0...v1.0.1) (2026-05-05)
 
 
