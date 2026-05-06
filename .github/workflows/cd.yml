@@ -75,10 +75,10 @@ jobs:
             echo "version=${INPUT_VERSION}" >> $GITHUB_OUTPUT
           fi
 
-  # ── STAGE: SEMANTIC RELEASE (solo dev) ─────────────────
+  # ── STAGE: SEMANTIC RELEASE (dev, qa, main) ─────────────
   semantic-release:
     needs: detect
-    if: needs.detect.outputs.ambiente == 'dev'
+    if: needs.detect.outputs.ambiente == 'dev' || needs.detect.outputs.ambiente == 'qa' || needs.detect.outputs.ambiente == 'main'
     uses: ./.github/workflows/_semantic-release.yml
     secrets: inherit
     with:
