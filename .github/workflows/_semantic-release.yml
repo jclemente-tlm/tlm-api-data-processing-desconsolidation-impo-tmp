@@ -45,11 +45,6 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Debug branch input
-        env:
-          BRANCH: ${{ inputs.branch }}
-        run: echo "branch input = '${BRANCH}'"
-
       - name: Generar release (Semantic Release)
         id: release
         uses: cycjimmy/semantic-release-action@v6
