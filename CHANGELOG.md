@@ -1,3 +1,11 @@
+## [1.0.3-dev.1](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/compare/v1.0.2...v1.0.3-dev.1) (2026-05-06)
+
+
+### Bug Fixes
+
+* actualiza la configuración de Semantic Release para incluir las ramas dev, qa y main ([e6749c7](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/e6749c7af76436012933f89d8103929a16d6c3f7))
+* elimina la salida de depuración de la entrada de rama en el flujo de trabajo de release ([cc7a1b0](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/commit/cc7a1b0d33c590ec9627f987e945e555b6cb2659))
+
 ## [1.0.2](https://github.com/jclemente-tlm/tlm-api-data-processing-desconsolidation-impo-tmp/compare/v1.0.1...v1.0.2) (2026-05-06)
 
 
